@@ -319,6 +319,6 @@ def api_crear_transaccion():
     }), 201
 
 # --- ARRANQUE DE LA APLICACIÓN ---
+inicializar_db()
 if __name__ == '__main__':
-    inicializar_db()
     app.run(debug=True)
