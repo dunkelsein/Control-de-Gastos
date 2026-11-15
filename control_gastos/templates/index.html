@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Control de Gastos</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+</head>
+<body>
+  <main class="container">
+    <nav>
+      <ul>
+        <li><strong>Hola, {{ current_user.username }}</strong></li>
+      </ul>
+      <ul>
+        <li><a href="/logout" role="button" class="outline contrast">Cerrar Sesión</a></li>
+      </ul>
+    </nav>
+
+    <h1>Control de Gastos Personales</h1>
+
+    <!-- Resumen de Saldo -->
+    <div class="grid">
+      <article><strong>Ingresos Totales:</strong> $<span id="resumen-ingresos">Cargando...</span></article>
+      <article><strong>Gastos Totales:</strong> $<span id="resumen-gastos">Cargando...</span></article>
+      <article><strong>Saldo Actual:</strong> $<span id="resumen-saldo">Cargando...</span></article>
+    </div>
+
+    <!-- Formulario para agregar -->
+    <h3>Nuevo Movimiento</h3>
+    <form method="POST">
+      <div class="grid">
+        <!-- Selector de Movimiento -->
+        <select id="select-tipo" name="tipo" required onchange="actualizarCategorias()">
+          <option value="" disabled selected>Movimiento</option>
+          <option value="Gasto">Gasto</option>
+          <option value="Ingreso">Ingreso</option>
+        </select>
+
+        <!-- Selector de Categoría (Inicialmente bloqueado) -->
+        <select id="select-categoria" name="categoria" required disabled>
+          <option value="" disabled selected>Primero seleccione el movimiento</option>
+        </select>
+
+        <input type="number" step="0.01" name="monto" placeholder="Monto" required>
+      </div>
+      <input type="text" name="descripcion" placeholder="Descripción (obligatoria)" required>
+      <button type="submit">Agregar Transacción</button>
+    </form>
+
+    <!-- Filtro por categoría -->
+    <h3>Historial</h3>
+    
+    <form method="GET">
+      <select name="categoria" onchange="this.form.submit()">
+        <option value="">Todas las categorías cargadas</option>
+        <option value="Alquiler" {% if categoria_filtro == 'Alquiler' %}selected{% endif %}>Alquiler</option>
+        <option value="Cobro de salario" {% if categoria_filtro == 'Cobro de salario' %}selected{% endif %}>Cobro de salario</option>
+        <option value="Educacion" {% if categoria_filtro == 'Educacion' %}selected{% endif %}>Educacion</option>
+        <option value="Gastos extras" {% if categoria_filtro == 'Gastos extras' %}selected{% endif %}>Gastos extras</option>
+        <option value="Ingreso extra" {% if categoria_filtro == 'Ingreso extra' %}selected{% endif %}>Ingreso extra</option>
+        <option value="Pago de Servicio" {% if categoria_filtro == 'Pago de Servicio' %}selected{% endif %}>Pago de Servicio</option>
+        <option value="Supermercado" {% if categoria_filtro == 'Supermercado' %}selected{% endif %}>Supermercado</option>
+        <option value="Transporte" {% if categoria_filtro == 'Transporte' %}selected{% endif %}>Transporte</option>
+      </select>
+    </form>
+
+    <!-- Tabla de movimientos -->
+    <figure>
+      <table>
+        <thead>
+          <tr>
+            <th>Tipo</th>
+            <th>Categoría</th>
+            <th>Monto</th>
+            <th>Descripción</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in transacciones %}
+          <tr>
+            <td>{{ t.tipo }}</td>
+            <td>{{ t.categoria }}</td>
+            <td>${{ t.monto | formato_moneda }}</td>
+            <td>{{ t.descripcion }}</td>
+            <td>
+              <div style="display: flex; gap: 10px;">
+                <a href="/editar/{{ t.id }}" role="button" class="secondary outline">Editar</a>
+                <form action="/eliminar/{{ t.id }}" method="POST" style="margin: 0;" onsubmit="return confirm('¿Eliminar registro?');">
+                  <button type="submit" class="contrast outline">Eliminar</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </figure>
+  </main>
+
+  <!-- Lógica en JavaScript para categorías dinámicas y API fetch -->
+  <script>
+
+document.addEventListener("DOMContentLoaded", function() {
+    const inputs = document.querySelectorAll("input[required], select[required]");
+    
+    inputs.forEach(input => {
+      // Se activa cuando el navegador detecta que el campo está vacío al enviar
+      input.addEventListener("invalid", function(event) {
+        if (input.value === "") {
+          input.setCustomValidity("Por favor, complete este campo obligatorio.");
+        }
+      });
+
+      // Limpia el mensaje de error cuando el usuario empieza a escribir o seleccionar
+      input.addEventListener("input", function(event) {
+        input.setCustomValidity("");
+      });
+    });
+  });
+
+    function actualizarCategorias() {
+      const tipoSelect = document.getElementById('select-tipo');
+      const categoriaSelect = document.getElementById('select-categoria');
+      const tipoSeleccionado = tipoSelect.value;
+
+      // Habilitar el selector de categorías
+      categoriaSelect.disabled = false;
+      categoriaSelect.innerHTML = '<option value="" disabled selected>Seleccione una categoría</option>';
+
+      let opciones = [];
+
+      if (tipoSeleccionado === 'Gasto') {
+        opciones = [
+          'Alquiler',
+          'Educacion',
+          'Gastos extras',
+          'Pago de Servicio',
+          'Supermercado',
+          'Transporte'
+        ];
+      } else if (tipoSeleccionado === 'Ingreso') {
+        opciones = [
+          'Cobro de salario',
+          'Ingreso extra'
+        ];
+      }
+
+      opciones.forEach(cat => {
+        const option = document.createElement('option');
+        option.value = cat;
+        option.textContent = cat;
+        categoriaSelect.appendChild(option);
+      });
+    }
+
+    function formatearMoneda(valor) {
+      return Math.round(valor).toLocaleString('es-PY');
+    }
+
+    function cargarResumenAPI() {
+      fetch('/api/resumen')
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Error al obtener el resumen');
+          }
+          return response.json();
+        })
+        .then(data => {
+          document.getElementById('resumen-ingresos').textContent = formatearMoneda(data.ingresos);
+          document.getElementById('resumen-gastos').textContent = formatearMoneda(data.gastos);
+          document.getElementById('resumen-saldo').textContent = formatearMoneda(data.saldo);
+        })
+        .catch(error => {
+          console.error('Error en fetch GET:', error);
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      cargarResumenAPI();
+    });
+  </script>
+</body>
+</html>
